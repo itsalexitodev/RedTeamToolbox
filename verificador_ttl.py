@@ -3,15 +3,19 @@ import os
 import time
 import platform
 import subprocess
+import re
 
-# Limpiar la pantalla segun el sistema operativo
-if platform.system().lower() == 'windows':
-    os.system('cls')
-else:
-    os.system('clear')
+# Limpiar la pantalla según el sistema operativo
+def limpiar_pantalla():
+    sistema = platform.system().lower()
+    if sistema == 'windows':
+        os.system('cls')
+    else:
+        os.system('clear')
 
-# Banner
-banner = """
+# Imprimir el banner
+def imprimir_banner():
+    banner = """
 ###############################################################
 #                                                             #
 #                  Verificador de Sistema Operativo           #
@@ -20,65 +24,82 @@ banner = """
 #                     Alex Garcia Rodriguez                   #
 ###############################################################
 """
-print(banner)
+    print(banner)
 
-# Verificar si la IP proporcionada es valida
+# Verificar si la IP proporcionada es válida
 def validar_ip(ip):
-    partes = ip.split('.')
-    if len(partes) != 4:
-        return False
-    for parte in partes:
-        if not parte.isdigit():
-            return False
-        num = int(parte)
-        if num < 0 or num > 255:
-            return False
-    return True
-
-# Bucle para solicitar una IP valida
-while True:
-    print("Introduce la IP que deseas verificar (Windows o Linux):")
-    ip = input().strip()
-
-    print(f'Analizando la direccion {ip}')
-    time.sleep(1)
-    
-    if validar_ip(ip):
-        print("La IP es valida.")
-        break
-    else:
-        print("La IP no es valida. Intentalo de nuevo.")
+    patron_ip = re.compile(r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$")
+    if patron_ip.match(ip):
+        partes = ip.split('.')
+        for parte in partes:
+            if int(parte) < 0 or int(parte) > 255:
+                return False
+        return True
+    return False
 
 # Obtener el valor del TTL
 def obtener_ttl(ip):
-    if platform.system().lower() == 'windows':
-        comando = f"ping -n 1 {ip}"
-    else:
-        comando = f"ping -c 1 {ip}"
+    sistema = platform.system().lower()
     
-    resultado = subprocess.run(comando, capture_output=True, text=True, shell=True)
-    salida = resultado.stdout
+    # Definir el comando según el sistema operativo
+    if sistema == 'windows':
+        comando = ['ping', '-n', '1', ip]
+    else:
+        comando = ['ping', '-c', '1', ip]
+    
+    try:
+        resultado = subprocess.run(comando, capture_output=True, text=True, timeout=5)
+        salida = resultado.stdout
 
-    # Buscar el valor de TTL en la salida del ping
-    ttl = None
-    for linea in salida.split('\n'):
-        if 'ttl=' in linea.lower():  # Hacer la busqueda case-insensitive
-            partes = linea.lower().split('ttl=')
-            ttl = int(partes[1].split()[0])
+        # Buscar el valor de TTL en la salida del ping
+        ttl = None
+        for linea in salida.split('\n'):
+            if 'ttl=' in linea.lower():
+                partes = linea.lower().split('ttl=')
+                ttl = int(partes[1].split()[0])
+                break
+
+        return ttl
+
+    except subprocess.TimeoutExpired:
+        print(f"El comando 'ping' ha tardado demasiado en responder.")
+        return None
+    except subprocess.SubprocessError as e:
+        print(f"Error al ejecutar el comando 'ping': {e}")
+        return None
+    except ValueError:
+        print(f"Error al extraer el TTL de la salida del 'ping'.")
+        return None
+
+# Programa principal
+def main():
+    limpiar_pantalla()
+    imprimir_banner()
+
+    # Bucle para solicitar una IP válida
+    while True:
+        ip = input("Introduce la IP que deseas verificar (Windows o Linux): ").strip()
+
+        if validar_ip(ip):
+            print(f"Analizando la dirección {ip}...")
+            time.sleep(1)
             break
+        else:
+            print("La IP no es válida. Inténtalo de nuevo.")
 
-    return ttl
+    # Obtener el TTL y determinar el sistema operativo
+    ttl = obtener_ttl(ip)
 
-# Validar la IP y determinar el sistema operativo basado en el TTL
-ttl = obtener_ttl(ip)
-
-if ttl is None:
-    print(f"No se pudo determinar el TTL para la IP {ip}.")
-else:
-    time.sleep(1)
-    
-    # Evaluar el valor de TTL
-    if ttl > 100:
-        print(f'La direccion {ip} es una maquina Windows (TTL={ttl})')
+    if ttl is None:
+        print(f"No se pudo determinar el TTL para la IP {ip}.")
     else:
-        print(f'La direccion {ip} es una maquina Linux (TTL={ttl})')
+        time.sleep(1)
+        # Evaluar el valor de TTL para determinar el SO
+        if ttl > 100:
+            print(f"La dirección {ip} es una máquina Windows (TTL={ttl})")
+        else:
+            print(f"La dirección {ip} es una máquina Linux (TTL={ttl})")
+
+# Ejecutar el programa principal
+if __name__ == "__main__":
+    main()
